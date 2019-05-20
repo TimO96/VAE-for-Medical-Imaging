@@ -9,11 +9,14 @@ import numpy.random
 
 import scipy.io
 from PIL import Image
+import PIL
 
 import torch
 import torch.utils.data as data_utils
 import torchvision.transforms as transforms
 import torchvision.transforms.functional
+
+import imgaug.augmenters as iaa
 
 
 def get_dataframe(path):
@@ -88,7 +91,7 @@ class SkinCancerData(data_utils.Dataset):
         labels_per_domain_list = []
 
         for index, row in tile_df.iterrows():
-            print(index)
+            #print(index)
             if index % 100 == 0: # --------------------------------------------------------------- limit data loaded temp
                 img = self.read_img_from_file(row['image_id'])
                 label = row['cell_type_idx']
@@ -119,7 +122,7 @@ class SkinCancerData(data_utils.Dataset):
             x = x.clone()
 
         if self.transform is not None:
-            x = self.transform(x)
+            x =  self.to_tensor(self.transform(self.to_pil(x)))
 
         return x, y
 
@@ -130,34 +133,38 @@ if __name__ == "__main__":
     kwargs = {'num_workers': 8, 'pin_memory': False}
 
     seed = 1
-    torch.manual_seed(seed)
+#    torch.manual_seed(seed)
     torch.backends.cudnn.benchmark = False
-    np.random.seed(seed)
+#    np.random.seed(seed)
 
-    age = [7]
 
-    print('Number of domains:', len(age))
-
+    param = np.arange(0, 0.4, 0.05)
+    
+    transform = torchvision.transforms.Compose([
+            torchvision.transforms.ColorJitter(saturation=np.random.choice(param), brightness=np.random.choice(param)),
+            torchvision.transforms.RandomHorizontalFlip(),
+            torchvision.transforms.RandomVerticalFlip()
+    ])
     train_loader = data_utils.DataLoader(
-        SkinCancerData('./dataset/', augmentation=False),
-        batch_size=1,
-        shuffle=True, **kwargs)
-
-    for j in range(1):
-
-        for i, (x, y) in enumerate(train_loader):
-
-            if i == 0:
-                save_image(x[:100].cpu(),
-                           'reconstruction_cell_train_' + '.png', nrow=10)
+        SkinCancerData('./dataset/', augmentation=False, transform=transform,size=128),
+        batch_size=6,
+        shuffle=False, **kwargs)
+    print("loaded")
+#    for j in range(1):
+#
+#        for i, (x, y) in enumerate(train_loader):
+#
+#            if i == 0:
+#                save_image(x[:100].cpu(),
+#                           'reconstruction_cell_train_' + '.png', nrow=10)
 
     # print(y_array, d_array)
     for batch_idx, (data, _) in enumerate(train_loader):
-        b = np.zeros((64,64,3))
-        b[:,:,0] = data[0,0]
-        b[:,:,1] = data[0,1]
-        b[:,:,2] = data[0,2]
+        b = np.zeros((128,128,3))
+        b[:,:,0] = data[batch_idx,0]
+        b[:,:,1] = data[batch_idx,1]
+        b[:,:,2] = data[batch_idx,2]
         plt.imshow(b)
         plt.show()
-        if batch_idx == 0:
+        if batch_idx == 5:
             break
