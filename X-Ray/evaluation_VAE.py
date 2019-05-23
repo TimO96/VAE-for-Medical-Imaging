@@ -10,48 +10,74 @@ from torchvision import datasets, transforms
 from torchvision.utils import save_image
 from torch.distributions import Normal, Laplace, Independent, Bernoulli, Gamma, Uniform, Beta
 from torch.distributions.kl import kl_divergence
+import numpy as np
+import pickle
 
 from sklearn.manifold import TSNE
 import data_loader
 
-def tsne_plot(model, check_digits):
+if __name__ == "__main__":
+    '''
     path = 'chest-xray-pneumonia/chest_xray/'
 
     train_loader_plot = torch.utils.data.DataLoader(
         data_loader.Xray_Dataset(path, train=True),
         batch_size=1, shuffle=True, **{})
+    '''
+    filename = 'finalized_model.sav'
+    model = pickle.load(open(filename, 'rb'))
 
-    z_dims = [[] for i in range(10)]
-    x_dims = [[] for i in range(10)]
+    train_data = datasets.MNIST('../data', train=False, transform=transforms.ToTensor())
 
-    for batch_idx, (data, label) in enumerate(train_loader_plot):
-        if label.item() in check_digits:
-            x_hat, _, _, z = model(data)
-            z_dims[label.item()].append(z.detach().numpy()[0])
-            x_dims[label.item()].append(x_hat.view(1, -1).detach().numpy()[0])
-            if len(z_dims[label.item()]) == 500:
-                check_digits.remove(label.item())
-            if not check_digits:
+    test_loader = torch.utils.data.DataLoader(train_data, batch_size=128, shuffle=True, **{})
+
+    count = 0
+    with torch.no_grad():
+        for batch_idx, (data, label) in enumerate(test_loader):
+            data = data
+            x_hat, _, _, _ = model(data)
+            if count == 0:
+                ys = label.numpy()
+                x_hats = x_hat.numpy()
+            else:
+                ys = np.append(ys, label.numpy())
+                x_hats = np.append(x_hats, x_hat.numpy(), axis=0)
+            if count >= 30:
                 break
+            count += 1
 
-    plt.figure(figsize=(10, 10))
-    for i in range(len(z_dims)):
-        print("nr. " + str(i) + " recons:" + str(len(z_dims[i])))
+    print(np.shape(x_hats))
+    print(np.shape(ys))
 
-    for i, data in enumerate(z_dims):
-        if data:
-            tsne = TSNE(n_components=2, perplexity=50, n_iter=10000, init='pca', random_state=0).fit_transform(data)
-            plt.scatter(tsne[:, 0], tsne[:, 1], label=i)
+    tsne = TSNE(n_components=2, random_state=0)
+    X_2d = tsne.fit_transform(x_hats.reshape(-1, 784))
 
-    plt.legend(loc=1)
+    target_ids = range(len(ys))
+
+    plt.figure(figsize=(6, 5))
+    colors = 'r', 'g', 'b', 'c', 'm', 'y', 'k', 'gray', 'orange', 'purple'
+    for i, c, label in zip(target_ids, colors, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]):
+        plt.scatter(X_2d[ys == i, 0], X_2d[ys == i, 1], c=c, label=label)
+    plt.legend()
     plt.show()
 
-    plt.figure(figsize=(10, 10))
+    xv = np.arange(0, 1, .05)
+    yv = np.arange(0, 1, .05)
+    sample = np.zeros([len(yv)*len(xv), 2])
+    counter = 0
+    for i, j in zip(xv, yv):
+        for j in yv:
+            sample[counter] = [i, j]
+            counter += 1
 
-    for i, data in enumerate(x_dims):
-        if data:
-            tsne = TSNE(n_components=2, perplexity=50, n_iter=10000, init='pca', random_state=0).fit_transform(data)
-            plt.scatter(tsne[:, 0], tsne[:, 1], label=i)
+    images = model.decode(torch.tensor(sample, dtype=torch.float)).detach().numpy()
+    image = np.zeros([len(xv)*28, len(yv)*28])
+    counter = 0
+    for i in range(len(xv)):
+        for j in range(len(yv)):
+            image[i*28:i*28+28,j*28:j*28+28] = images[counter].reshape((28,28))
+            counter += 1
 
-    plt.legend(loc=1)
+    plt.figure(figsize=(15, 15))
+    plt.imshow(image, cmap='gray')
     plt.show()
