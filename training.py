@@ -23,7 +23,7 @@ from distributions import distributions
 distribution = distributions()
 
 parser = argparse.ArgumentParser(description='VAE')
-parser.add_argument('--architecture-type', type=int, default=3, metavar='T',
+parser.add_argument('--architecture-type', type=int, default=1, metavar='T',
                                 help='set 1 for lin only, 2 for conv-lin-lin-conv, 3 for conv only')
 parser.add_argument('--batch-size', type=int, default=128, metavar='N',
                                 help='input batch size for training (default: 128)')
@@ -121,7 +121,7 @@ def layer_order(choice):
     options = [[None, encoder_layers, decoder_layers, None, None, None],
                 [conv_encoder_layers, encoder_layers, decoder_layers, conv_decoder_layers, None, None],
                 [conv_encoder_layers, None, None, conv_decoder_layers, en_conv_1, en_conv_2]]
-    if args.architecture_type == choice:
+    if args.architecture_type == 3:
         args.z_dim =get_z_dim(conv_encoder_layers, en_conv_1)
     return options[choice - 1]
 
@@ -186,7 +186,6 @@ if __name__ == "__main__":
     # set 1 for lin only, 2 for conv-lin-lin-conv, 3 for conv only
     layers = layer_order(args.architecture_type)
        
-###############################################################################
 # p_z still dependent on the parameters per distribution used
     p_z = args.base_distribution(loc=torch.zeros(1,args.z_dim), scale=1) #p_z = Beta(torch.tensor([0.3, 0.3]), torch.tensor([0.3, 0.3]))
     
@@ -205,6 +204,7 @@ if __name__ == "__main__":
         betas[:len(adeptive_betas)] = adeptive_betas     
     betas[-1] = args.final_beta
 
+###############################################################################
     for epoch in range(1, args.epochs + 1):
         model.set_beta(betas[epoch - 1])
         train(epoch)
@@ -217,4 +217,26 @@ if __name__ == "__main__":
             #               'results/sample_' + str(epoch) + '.png')
     
     print("done")
+    # make a model save 
+    xv = np.arange(-2, 2, .1)
+    yv = np.arange(-2, 2, .1)
+    sample = np.zeros([len(yv)*len(xv), 2])
+    counter = 0
+    for i in xv:
+        for j in yv:
+            sample[counter] = [i, j]
+            counter += 1
+    
+    images = model.decode(torch.tensor(sample, dtype=torch.float)).detach().numpy()
+    image = np.zeros([len(xv)*28, len(yv)*28])
+    counter = 0
+    for i in range(len(xv)):
+        for j in range(len(yv)):
+            image[i*28:i*28+28,j*28:j*28+28] = images[counter].reshape((28,28))
+            counter += 1
+            
+    #save_image(torch.tensor(image),'results/sample_test' + str(epoch) + '.png')
+    plt.figure(figsize=(15,15))
+    plt.imshow(image, cmap='gray') 
+    plt.show()
         

@@ -50,7 +50,7 @@ class conv_layer_architecture():
         decoder_architecture = np.flip(decoder_architecture, 0)
         decoder_architecture[:, 2:4] = np.flip(decoder_architecture[:, 2:4], 1)
         decoder_architecture[:, 0:2] = np.flip(decoder_architecture[:, 0:2], 1)
-        return np.append(decoder_architecture, np.zeros((6,1)), 1)
+        return np.append(decoder_architecture, np.zeros((len(self.architecture),1)), 1)
     
     def adjust_decoder(self):
         start_size = self.architecture[0,2]
@@ -151,9 +151,13 @@ class conv_layer_architecture():
     
     def get_conv_text(self):
         print("\nEncoder architecture")
-        for layer in self.architecture:
+        for layer in self.architecture[:-1]:
             print("nn.Conv2d(%2d, %2d, kernel_size=%2d, stride=%2d, padding=%2d)," % (layer[0], layer[1], layer[4], layer[5], layer[6]))
         
+        print("\nEncoder parameter architecture")
+        for layer in self.architecture[-1:]:
+            print("nn.Conv2d(%2d, %2d, kernel_size=%2d, stride=%2d, padding=%2d)," % (layer[0], layer[1], layer[4], layer[5], layer[6]))
+
         print("\nDecoder architecture")
         for layer in self.reverse_architecture:
             print("nn.ConvTranspose2d(%2d, %2d, kernel_size=%2d, stride=%2d, padding=%2d, output_padding=%2d)," % (layer[0], layer[1], layer[4], layer[5], layer[6], layer[7]))
@@ -174,12 +178,14 @@ if __name__ == "__main__":
     # If you you fill in the output size, you can leave any combination of kernel size, stride or padding empty
     # It will try to fill it in, so that it matches the desired output size as close as possible
     # ------------------------------------------------------------------------------------------
-    conv_architecture = np.array([[1, 1, 28, 28, None, None, None],
-                                  [1, 1, 28, 28, None, None, None],
-                                  [1, 1, 28, 14, None, None, None],
-                                  [1, 1, 14, 14, None, None, None],
-                                  [1, 1, 14, 8,  None, None, None],
-                                  [1, 1, 8, 2, None, None, None]])
+    conv_architecture = np.array([[1, 10, 28, 28, None, None, None],
+                                  [10, 20, 24, 24, None, None, None],
+                                  [20, 30, 20, 20, None, None, None],
+                                  [30, 40, 16, 16, None, None, None],
+                                  [40, 50, 12, 12,  None, None, None],
+                                  [50, 60, 12, 12,  None, None, None],
+                                  [60, 64, 4, 4, None, None, None],
+                                  [64, 64, 4, 4, None, 2, None]])
     # ------------------------------------------------------------------------------------------
     # set the intervall between which the program is allowed to search
     # stride is set between 1 and max_stride

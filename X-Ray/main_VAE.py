@@ -9,12 +9,14 @@ from torchvision import datasets, transforms
 from torchvision.utils import save_image
 from torch.distributions import Normal, Laplace, Independent, Bernoulli, Gamma, Uniform, Beta
 from torch.distributions.kl import kl_divergence
+import pickle
 
 import model_VAE
 import evaluation_VAE
+import data_loader
 
 
-parser = argparse.ArgumentParser(description='VAE MNIST')
+parser = argparse.ArgumentParser(description='VAE XRAY')
 parser.add_argument('--batch-size', type=int, default=128, metavar='N',
                     help='input batch size for training (default: 128)')
 parser.add_argument('--epochs', type=int, default=10, metavar='N',
@@ -37,24 +39,48 @@ device = torch.device("cuda" if args.cuda else "cpu")
 
 kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
 
+path = 'chest-xray-pneumonia/chest_xray/'
+
+'''
 train_loader = torch.utils.data.DataLoader(
-    datasets.MNIST('../data', train=True, download=True,
-                   transform=transforms.ToTensor()),
-    batch_size=args.batch_size, shuffle=True, **kwargs)
-    
-test_loader = torch.utils.data.DataLoader(
-    datasets.MNIST('../data', train=False, transform=transforms.ToTensor()),
+    data_loader.Xray_Dataset(path, train=True),
     batch_size=args.batch_size, shuffle=True, **kwargs)
 
-model = model_VAE.VAE().to(device)
+test_loader = torch.utils.data.DataLoader(
+    data_loader.Xray_Dataset(path, train=False),
+    batch_size=args.batch_size, shuffle=True, **kwargs)
+'''
+
+train_data = datasets.MNIST('../data', train=True, download=True, transform=transforms.ToTensor())
+
+train_loader = torch.utils.data.DataLoader(
+    train_data, batch_size=args.batch_size, shuffle=True, **kwargs)
+
+test_data = datasets.MNIST('../data', train=False, transform=transforms.ToTensor())
+
+test_loader = torch.utils.data.DataLoader(
+    test_data, batch_size=args.batch_size, shuffle=True, **kwargs)
+
+x_dim = 28
+z_dim = 2
+
+model = model_VAE.VAE(x_dim**2, z_dim).to(device)
+#filename = 'finalized_model_laplace.sav'
+#model = pickle.load(open(filename, 'rb'))
 
 optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
-def loss_function(x_hat, x, p_x, q_z, p_x_dist):
-    x = x.view(-1, x_hat.size(1))
-    BCE = torch.sum(-p_x.log_prob(x))
-    KLD = kl_divergence(q_z.base_dist, p_x_dist.base_dist)
-    KLD = torch.sum(KLD.sum(len(p_x_dist.event_shape)-1))
+reconstruction_function = nn.BCELoss()
+
+def loss_function(x_hat, x, q_z, p_x, z):
+    #x = x.view(-1, x_hat.size(1))
+    #tensor = torch.ones(1)
+    #p_x_dist = Beta(tensor.new_full((z.size(0), z_dim), 0.5), tensor.new_full((z.size(0), z_dim), 0.5))
+    p_x_dist = Normal(torch.zeros(z.size(0), z_dim), torch.ones(z.size(0), z_dim))
+    BCE = torch.sum(-p_x.log_prob(x.view(x.size(0), x_dim**2)))
+    KLD = torch.sum(q_z.log_prob(z) - p_x_dist.log_prob(z))
+
+    print(BCE, KLD)
 
     return BCE + KLD
 
@@ -64,8 +90,8 @@ def train(epoch):
     for batch_idx, (data, _) in enumerate(train_loader):
         data = data.to(device)
         optimizer.zero_grad()
-        recon_batch, p_x, q_z, p_x_dist, _ = model(data)
-        loss = loss_function(recon_batch, data, p_x, q_z, p_x_dist)
+        recon_batch, q_z, p_x, z = model(data)
+        loss = loss_function(recon_batch, data, q_z, p_x, z)
         loss.backward()
         train_loss += loss.item()
         optimizer.step()
@@ -83,16 +109,17 @@ def test(epoch):
     model.eval()
     test_loss = 0
     with torch.no_grad():
-        for i, (data, _) in enumerate(test_loader):
+        for i, (data, label) in enumerate(test_loader):
             data = data.to(device)
-            recon_batch, p_x, q_z, p_x_dist, _ = model(data)
-            test_loss += loss_function(recon_batch, data, p_x, q_z, p_x_dist).item()
+            recon_batch, q_z, p_x, z = model(data)
+            test_loss += loss_function(recon_batch, data, q_z, p_x, z).item()
             if i == 0:
                 n = min(data.size(0), 8)
                 comparison = torch.cat([data[:n],
-                                      recon_batch.view(args.batch_size, 1, 28, 28)[:n]])
+                                      recon_batch.view(args.batch_size, 1, x_dim, x_dim)[:n]])
+                print(label[:n])
                 save_image(comparison.cpu(),
-                         'results/reconstruction_' + str(epoch) + '.png', nrow=n)
+                         'results/reconstruction_nnlaplace_' + str(epoch) + '.png', nrow=n)
 
     test_loss /= len(test_loader.dataset)
     print('====> Test set loss: {:.4f}'.format(test_loss))
@@ -102,9 +129,11 @@ if __name__ == "__main__":
         train(epoch)
         test(epoch)
         with torch.no_grad():
-            sample = torch.randn(64, 20).to(device)
+            sample = torch.randn(64, z_dim).to(device)
             sample = model.decode(sample).cpu()
-            save_image(sample.view(64, 1, 28, 28),
-'results/sample_' + str(epoch) + '.png')
-    if args.tsne:
-        evaluation_VAE.tsne_plot(model, [1, 2, 3])
+            save_image(sample.view(64, 1, x_dim, x_dim),
+'results/sample_betabetalaplace_' + str(epoch) + '.png')
+        filename = 'finalized_model_laplace25.sav'
+        pickle.dump(model, open(filename, 'wb'))
+    #if args.tsne:
+        #evaluation_VAE.tsne_plot(model, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])

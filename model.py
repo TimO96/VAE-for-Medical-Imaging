@@ -92,7 +92,7 @@ class VAE(nn.Module):
             x_hat = x_hat.view(-1,self.x , self.y , self.z)
             x_hat = self.conv_decoder(x_hat)
             x_hat = x_hat.view(-1,x_hat.size(2) * x_hat.size(3))
-        return self.activation_layer_1(x_hat)
+        return self.activation_layer_3(x_hat)
     
     def up_beta(self):
         self.beta += 1
