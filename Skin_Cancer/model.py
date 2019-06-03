@@ -7,6 +7,7 @@ Created on Wed May  8 13:01:22 2019
 import torch.utils.data
 import torch.nn.functional as F
 from torch import nn, optim
+from torch.autograd import Variable
 
 
 
@@ -59,6 +60,7 @@ class VAE(nn.Module):
         self.y = 0
         self.z = 0
         self.size = size * size
+        self.loss = nn.CrossEntropyLoss()
         
     def encode(self, x):
         if self.conv_encoder is None:
@@ -132,8 +134,16 @@ class VAE(nn.Module):
     def loss_function(self, x_hat, x,q_z_given_x, p_x_given_z, z):
 #        x = x.view(-1, self.size) # hardcoded for MNIST
 #        BCE = -p_x_given_z.log_prob(x)
-        x_hat= x_hat.view(self.batch,100,64,64)
-        recon_loss = -self.log_mix_dep_Logistic_256(x, x_hat, average=True, n_comps=10)
+        
+        x_hat = x_hat.view(self.batch, 3, 256, 64, 64)
+        x_hat = Variable(x_hat)
+        x_hat = x_hat.permute(0, 1, 3, 4, 2)
+        x_hat = x_hat.contiguous()
+        x_hat = torch.round(256 * x_hat.view(-1, 256))
+        target = Variable(x.data.view(-1) * 255).long()
+        recon_loss = self.loss(x_hat, target)
+#        x_hat= x_hat.view(self.batch,100,64,64)
+#        recon_loss = -self.log_mix_dep_Logistic_256(x, x_hat, average=True, n_comps=10)
         
         KLD = q_z_given_x.log_prob(z) - self.p_z.log_prob(z)
         #KLD = kl_divergence(q_z_given_x.base_dist, self.p_z.base_dist) # vervangen en werkend krijgen 

@@ -7,6 +7,7 @@ Created on Wed May  8 13:06:11 2019
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 import torch.utils.data as data_utils
 import torchvision.transforms as transforms
 import torchvision.transforms.functional
@@ -14,11 +15,9 @@ import argparse
 import torch
 import numpy as np
 import torch.utils.data
-import torch.nn.functional as F
 from torch import nn, optim
 from torchvision import datasets, transforms
 from torchvision.utils import save_image
-
 
 from model import VAE
 from conv_layer_architecture import conv_layer_architecture
@@ -29,7 +28,7 @@ distribution = distributions()
 parser = argparse.ArgumentParser(description='VAE')
 parser.add_argument('--architecture-type', type=int, default=3, metavar='T',
                                 help='set 1 for lin only, 2 for conv-lin-lin-conv, 3 for conv only')
-parser.add_argument('--batch-size', type=int, default=32, metavar='N',
+parser.add_argument('--batch-size', type=int, default=4, metavar='N',
                                 help='input batch size for training (default: 128)')
 parser.add_argument('--epochs', type=int, default=5, metavar='N',
                                 help='number of epochs to train (default: 10)')
@@ -107,23 +106,23 @@ decoder_layers = [
     ]
 
 conv_decoder_layers = [
-      nn.ConvTranspose2d(100, 100, kernel_size= 4, stride= 2, padding= 4, output_padding= 0),
-    nn.ConvTranspose2d(100, 100, kernel_size= 5, stride= 1, padding= 2, output_padding= 0),
+      nn.ConvTranspose2d(100, 90, kernel_size= 4, stride= 2, padding= 4, output_padding= 0),
+    nn.ConvTranspose2d(90, 80, kernel_size= 5, stride= 1, padding= 2, output_padding= 0),
     nn.ReLU(True),
-    nn.ConvTranspose2d(100, 100, kernel_size= 4, stride= 2, padding= 3, output_padding= 0),
-    nn.ConvTranspose2d(100, 100, kernel_size= 5, stride= 1, padding= 0, output_padding= 0),
+    nn.ConvTranspose2d(80, 70, kernel_size= 4, stride= 2, padding= 3, output_padding= 0),
+    nn.ConvTranspose2d(70, 60, kernel_size= 5, stride= 1, padding= 0, output_padding= 0),
     nn.ReLU(True),
-    nn.ConvTranspose2d(100, 100, kernel_size= 5, stride= 1, padding= 2, output_padding= 0),
-    nn.ConvTranspose2d(100, 100, kernel_size= 5, stride= 1, padding= 0, output_padding= 0),
+    nn.ConvTranspose2d(60, 50, kernel_size= 5, stride= 1, padding= 2, output_padding= 0),
+    nn.ConvTranspose2d(50, 40, kernel_size= 5, stride= 1, padding= 0, output_padding= 0),
     nn.ReLU(True),
-    nn.ConvTranspose2d(100, 100, kernel_size= 5, stride= 1, padding= 2, output_padding= 0),
-    nn.ConvTranspose2d(100, 100, kernel_size= 4, stride= 2, padding= 4, output_padding= 1),
+    nn.ConvTranspose2d(40, 30, kernel_size= 5, stride= 1, padding= 2, output_padding= 0),
+    nn.ConvTranspose2d(30, 20, kernel_size= 4, stride= 2, padding= 4, output_padding= 1),
     nn.ReLU(True),
-    nn.ConvTranspose2d(100, 100, kernel_size= 5, stride= 1, padding= 2, output_padding= 0),
-    nn.ConvTranspose2d(100, 100, kernel_size= 4, stride= 2, padding= 4, output_padding= 0),
-    nn.ConvTranspose2d(100,  100, kernel_size= 5, stride= 1, padding= 2, output_padding= 0),
+    nn.ConvTranspose2d(20, 128, kernel_size= 5, stride= 1, padding= 2, output_padding= 0),
+    nn.ConvTranspose2d(128, 256, kernel_size= 4, stride= 2, padding= 4, output_padding= 0),
+    nn.ConvTranspose2d(256,  3*256, kernel_size= 5, stride= 1, padding= 2, output_padding= 0),
     ]
-activation_layer = [[], [nn.Softplus()], [nn.Softplus()]]
+activation_layer = [[], [nn.Softplus()], [nn.Sigmoid()]]
 
 
 def load_data():
@@ -183,7 +182,8 @@ def test(epoch):
 #    test_loss = 0
     with torch.no_grad():
         for i, (data, _) in enumerate(train_loader):
-            save_reconstructions(model, data)
+            sample_image_CE(epoch, model, data)
+#            save_reconstructions(model, data)
             if i == 2:
                 break
 #            data = data
@@ -251,7 +251,38 @@ def save_reconstructions(model, x):
         comparison = torch.cat([x[:n],
                                 sample_t])
         save_image(comparison.cpu(),
-                   'reconstruction_diva_resnet_top10_beta_' + str(epoch) + '.png', nrow=n)
+                   'reconstruction_diva_resnet_top10_beta2_' + str(epoch) + '.png', nrow=n)
+        
+def sample_image_CE(epoch, model, x):
+    """Sampling Images"""
+
+    image_path =  'reconstruction_diva_resnet_top10_beta2_' + str(epoch) + '.png'
+
+    sample = torch.zeros(args.batch_size, 3, 64, 64)
+    with torch.no_grad():
+        x_recon, _ = model.forward(x)
+        x_recon = x_recon.view(args.batch_size, 3, 256, 64, 64)
+        x_recon = x_recon.permute(0, 1, 3, 4, 2)    
+
+    sample = torch.zeros(args.batch_size, 3, 64, 64)
+
+    for i in range(64):
+        for j in range(64):
+
+            # [batch_size, channel, height, width, 256]
+
+            # out[:, :, i, j]
+            # => [batch_size, channel, 256]
+            probs = F.softmax(x_recon[:, :, i, j], dim=2).data
+
+            # Sample single pixel (each channel independently)
+            for k in range(3):
+                # 0 ~ 255 => 0 ~ 1
+                pixel = torch.multinomial(probs[:, k], 1).float() / 255.
+                sample[:, k, i, j] = pixel
+
+
+    save_image(sample, image_path)
 
 
 def get_z_dim(encoder, loc_encoder):
@@ -274,6 +305,7 @@ def get_z_dim(encoder, loc_encoder):
 
 ###############################################################################
 if __name__ == "__main__":
+
     kwargs = {'num_workers': 8, 'pin_memory': False}
     
     torch.manual_seed(args.seed)
@@ -317,11 +349,12 @@ if __name__ == "__main__":
     betas[-1] = args.final_beta
     print("Model is set")
     print("Start training")
+    loss = []
 ###############################################################################
     for epoch in range(1, args.epochs + 1):
         model.set_beta(betas[epoch - 1])
-        loss = train(epoch)
-        test(epoch)
+        loss.append(train(epoch))
+#        test(epoch)
             #if epoch <= 10:
             #    model.set_beta(betas[epoch-1])
             #with torch.no_grad():
