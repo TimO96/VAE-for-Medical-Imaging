@@ -1,21 +1,30 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Thu May  9 17:08:31 2019
+
+@author: Joris
+"""
+
 from torch.distributions import Normal, Laplace, Independent, Bernoulli, Gamma, Uniform, Beta
 
-# Distribution namespaces
-
-def normal_dist(mu, var):
-    return Normal(loc=mu, scale=var)
-
-def laplace_dist(mu, var):
-    return Laplace(loc=mu, scale=var)
-
-def gamma_dist(mu, var):
-    return Gamma(concentration=mu, rate=var)
-
-def beta_dist(mu, var):
-    return Beta(concentration1=mu, concentration0=var)
-
-def bernoulli_loss(x_hat):
-    return Bernoulli(x_hat)
-
-def laplace_loss(x_hat, scale=0.01):
-    return Laplace(loc=x_hat, scale=scale)
+class distributions():
+    def normal(self, loc, scale):
+         return Independent(Normal(loc=loc, scale=scale), 1)
+    
+    def laplace(self, loc, scale):
+        return Independent(Laplace(loc=loc, scale=scale), 1)
+    
+    def gamma(self, loc, scale):
+        return Independent(Gamma(loc, scale), 1)
+    
+    def beta(self, loc, scale):
+        return Independent(Beta(loc, scale), 1)
+    
+    def bernoulli_loss(self, x_hat):
+        return Independent(Bernoulli(x_hat), 1)
+    
+    def laplace_loss(self, x_hat):
+        return Independent(Laplace(loc=x_hat, scale=1e-2), 1)
+    
+    def normal_loss(self, x_hat):
+        return Independent(Normal(loc=x_hat, scale=1), 1)   
