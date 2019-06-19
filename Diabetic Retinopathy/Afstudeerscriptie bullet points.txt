@@ -1,0 +1,67 @@
+1. Introduction
+  -1.1 Background
+    -Medical Images and the labelling by medical experts
+    -Why unsupervised learning is useful
+    -Why VAEs
+
+  -1.2 Research Question
+    -What do we want to Research? with the actual RQ
+    -Social importance
+    -What do we expect?
+
+2. Theoretical Framework
+  -2.1 VAE structure
+    -Encoder, decoder, latent variables (maybe reparametrization trick)
+    -probability distributions
+  -2.2 Different layer structures
+    -linear
+    -linear + convolutional
+    -fully convolutional
+    -ResNet
+  -2.3 probabilities
+    -normal
+    -beta
+    -gamma
+    -mixtures
+  -2.4 loss functions
+    -BCE + KLD
+    -Bernoulli vs Laplace
+    -color losses
+  -2.5 Related work
+    -Insights on what works from different papers
+    -the disentangled technique with beta
+
+3. Research
+  -3.1 Python and Pytorch implementation
+    -Why pytorch?
+    -training a model with pytorch layers and probabilities
+  -3.2 Method
+    -different structures, probabilities and loss functions (short recap)
+    -setting reasonable parameters for z_dim, epochs, pixel width/height, batch_size
+    -preprocessing the data (data loaders)
+    -how to evaluate?
+      -loss function comparison
+      -plots
+        -t-sne
+        -2d plot (maybe if z=2)
+        -learning rate of distance and divergence loss
+
+4. Results
+  -architectural structures
+  -probabilities
+  -loss functions
+
+5. Evaluation
+  -discussing the results
+
+6. Conclusion
+  -Answer the research question
+  -Is it what we expected?
+  -Why (not)?
+  -Are VAEs suitable for medical images?
+
+7. Future Work
+  -different structures that can be used
+  -different medical datasets
+
+8. References
