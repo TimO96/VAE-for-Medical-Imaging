@@ -30,12 +30,22 @@ def laplace_loss(x_hat, scale=0.08):
     return Laplace(loc=x_hat, scale=scale)
 
 class VAE(nn.Module):
-    def __init__(self, x_dim, z_dim, architecture, distribution):
+    def __init__(self, x_dim, z_dim, architecture, distribution, loss):
         super(VAE, self).__init__()
 
         self.x_dim = x_dim
         self.z_dim = z_dim
         self.arch = architecture
+        
+        self.loss = loss
+
+        if self.loss == 'mixture':
+            self.channel1 = 128
+            self.channel2 = 100
+
+        if self.loss == 'CE':
+            self.channel1 = 256*2
+            self.channel2 = 256*3
 
         self.conv1 = nn.Sequential(
         nn.Conv2d(3, 32, kernel_size=4, stride=1, padding=2),
@@ -146,52 +156,52 @@ class VAE(nn.Module):
         nn.ConvTranspose2d(256, 256, kernel_size=4, stride=1, padding=1, output_padding=0),
         nn.BatchNorm2d(256),
         nn.ELU(),
-        nn.ConvTranspose2d(256, 128, kernel_size=4, stride=2, padding=2, output_padding=1),
-        nn.BatchNorm2d(128),
+        nn.ConvTranspose2d(256, self.channel1, kernel_size=4, stride=2, padding=2, output_padding=1),
+        nn.BatchNorm2d(self.channel1),
         nn.ELU()
         )
 
         self.shortcut_de1 = nn.Sequential(
-        nn.ConvTranspose2d(256, 128, kernel_size=1, stride=2, padding=1, output_padding=0),
-        nn.BatchNorm2d(128),
+        nn.ConvTranspose2d(256, self.channel1, kernel_size=1, stride=2, padding=1, output_padding=0),
+        nn.BatchNorm2d(self.channel1),
         nn.Upsample(5),
         nn.ELU()
         )
 
         self.conv_decoder_2 = nn.Sequential(
-        nn.ConvTranspose2d(128, 128, kernel_size=4, stride=1, padding=1, output_padding=0),
-        nn.BatchNorm2d(128),
+        nn.ConvTranspose2d(self.channel1, self.channel1, kernel_size=4, stride=1, padding=1, output_padding=0),
+        nn.BatchNorm2d(self.channel1),
         nn.ELU(),
-        nn.ConvTranspose2d(128, 100, kernel_size=4, stride=2, padding=2, output_padding=1),
-        nn.BatchNorm2d(100),
+        nn.ConvTranspose2d(self.channel1, self.channel2, kernel_size=4, stride=2, padding=2, output_padding=1),
+        nn.BatchNorm2d(self.channel2),
         nn.ELU()
         )
 
         self.shortcut_de2 = nn.Sequential(
-        nn.ConvTranspose2d(128, 100, kernel_size=1, stride=2, padding=1, output_padding=0),
-        nn.BatchNorm2d(100),
+        nn.ConvTranspose2d(self.channel1, self.channel2, kernel_size=1, stride=2, padding=1, output_padding=0),
+        nn.BatchNorm2d(self.channel2),
         nn.Upsample(11),
         nn.ELU()
         )
 
         self.conv_decoder_3 = nn.Sequential(
-        nn.ConvTranspose2d(100, 100, kernel_size=4, stride=1, padding=2, output_padding=0),
-        nn.BatchNorm2d(100),
+        nn.ConvTranspose2d(self.channel2, self.channel2, kernel_size=4, stride=1, padding=2, output_padding=0),
+        nn.BatchNorm2d(self.channel2),
         nn.ELU(),
-        nn.ConvTranspose2d(100, 100, kernel_size=4, stride=2, padding=2, output_padding=1),
-        nn.BatchNorm2d(100),
+        nn.ConvTranspose2d(self.channel2, self.channel2, kernel_size=4, stride=2, padding=2, output_padding=1),
+        nn.BatchNorm2d(self.channel2),
         nn.ELU(),
-        nn.ConvTranspose2d(100, 100, kernel_size=4, stride=1, padding=1, output_padding=0),
-        nn.BatchNorm2d(100),
+        nn.ConvTranspose2d(self.channel2, self.channel2, kernel_size=4, stride=1, padding=1, output_padding=0),
+        nn.BatchNorm2d(self.channel2),
         nn.ELU(),
-        nn.ConvTranspose2d(100, 100, kernel_size=4, stride=1, padding=1, output_padding=0),
-        nn.BatchNorm2d(100),
+        nn.ConvTranspose2d(self.channel2, self.channel2, kernel_size=4, stride=1, padding=1, output_padding=0),
+        nn.BatchNorm2d(self.channel2),
         nn.ELU()
         )
 
         self.shortcut_de3 = nn.Sequential(
-        nn.ConvTranspose2d(100, 100, kernel_size=1, stride=2, padding=1, output_padding=0),
-        nn.BatchNorm2d(100),
+        nn.ConvTranspose2d(self.channel2, self.channel2, kernel_size=1, stride=2, padding=1, output_padding=0),
+        nn.BatchNorm2d(self.channel2),
         nn.Upsample(21),
         nn.ELU()
         )

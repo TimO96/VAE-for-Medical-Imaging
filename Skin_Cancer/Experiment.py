@@ -29,7 +29,7 @@ parser.add_argument('--arch', default='fcn', metavar='N',
                     help='architecture')
 parser.add_argument('--distribution', default='laplace', metavar='N',
                     help='architecture')
-parser.add_argument('--loss_function', default='mixture', metavar='N',
+parser.add_argument('--loss', default='CE', metavar='N',
                     help='architecture')
 parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='enables CUDA training')
@@ -78,39 +78,44 @@ if args.distribution == 'gaussian':
 else:
     distri = Laplace
 
-model = model_VAE.VAE(x_dim**2, z_dim, arch, args.distribution).to(device)
+model = model_VAE.VAE(x_dim**2, z_dim, arch, args.distribution, args.loss).to(device)
 #filename = 'finalized_model_retina_normalnormal.sav'
 #model = pickle.load(open(filename, 'rb'))
 
 optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
-#loss = nn.CrossEntropyLoss()
+loss = nn.CrossEntropyLoss()
 
 def loss_function(x_hat, x, q_z, z, epoch):
-    '''
-    x_hat = x_hat.view(args.batch_size, 3, 256, 64, 64)
-    x_hat = Variable(x_hat)
-    x_hat = x_hat.permute(0, 1, 3, 4, 2)
-    x_hat = x_hat.contiguous()
-    x_hat = torch.round(256 * x_hat.view(-1, 256))
-    target = Variable(x.data.view(-1) * 255).long()
-    BCE = loss(x_hat, target)
-    '''
+    if args.loss=='mixture':
+        BCE = torch.mean(-log_mix_dep_Logistic_256(x, x_hat, average=True, n_comps=10))
+
+    if args.loss=='CE':
+        x_hat = x_hat.view(-1, 3, 256, 64, 64)
+        x_hat = x_hat.permute(0, 1, 3, 4, 2)
+        x_hat = x_hat.contiguous()
+        x_hat = x_hat.view(-1, 256)
+        #x_hat = torch.round(256 * x_hat.view(-1, 256))
+        target = Variable(x.data.view(-1) * 255).long()
+        BCE = loss(x_hat, target)
     #x = x.view(-1, x_hat.size(1))
     #tensor = torch.ones(1)
     #p_x_dist = Beta(tensor.new_full((z.size(0), z_dim), 0.5).to(device), tensor.new_full((z.size(0), z_dim), 0.5).to(device))
     z_sqrt = int(np.sqrt(z_dim))
-    if arch == 'resnet' or arch == 'convlin':
-        p_x_dist = Independent(distri(torch.zeros(z.size(0), z_dim).to(device), torch.ones(z.size(0), z_dim).to(device)), 1)
+    if arch == 'convlin':
+        p_x_dist = Normal(torch.zeros(z.size(0), z_dim).to(device), torch.ones(z.size(0), z_dim).to(device))
     else:
-        p_x_dist = Independent(distri(torch.zeros(z.size(0), 1, z_sqrt, z_sqrt).to(device), torch.ones(z.size(0), 1, z_sqrt, z_sqrt).to(device)), 1)
+        p_x_dist = Normal(torch.zeros(z.size(0), 1, z_sqrt, z_sqrt).to(device), torch.ones(z.size(0), 1, z_sqrt, z_sqrt).to(device))
     one_third = round(args.epochs/3)
-    if epoch<=one_third:
-        beta = (beta_final*epoch)/one_third
-    else:
-        beta = beta_final
 
-    BCE = torch.mean(-log_mix_dep_Logistic_256(x, x_hat, average=True, n_comps=10))
+    if beta_final>=1:
+        if epoch<=one_third:
+            beta = (beta_final*epoch)/one_third
+        else:
+            beta = beta_final
+    else:
+        beta = 1
+
     #BCE = torch.sum(-p_x.log_prob(x.view(x.size(0), x_dim**2)))
     KLD = torch.mean(q_z.log_prob(z) - p_x_dist.log_prob(z))
 
@@ -228,6 +233,29 @@ def sample(x_gen):
     sample = torch.cat([x_r, x_g, x_b], 1)
     return sample
 
+def sample_CE(x_gen):
+    """Sampling Images"""
+    sample = torch.zeros(x_gen.size(0), 3, x_dim, x_dim).cuda()
+    x_gen = x_gen.view(x_gen.size(0), 3, 256, x_dim, x_dim)
+    x_gen = x_gen.permute(0, 1, 3, 4, 2)
+
+    for i in range(x_dim):
+        for j in range(x_dim):
+
+            # [batch_size, channel, height, width, 256]
+
+            # out[:, :, i, j]
+            # => [batch_size, channel, 256]
+            probs = F.softmax(x_gen[:, :, i, j], dim=2).data
+
+            # Sample single pixel (each channel independently)
+            for k in range(3):
+                # 0 ~ 255 => 0 ~ 1
+                pixel = (torch.multinomial(probs[:, k], 1).float() / 255.).reshape(-1)
+                sample[:, k, i, j] = pixel
+
+    return sample
+
 def train(epoch):
     model.train()
     train_loss = 0
@@ -263,7 +291,11 @@ def test(epoch):
             recon_batch, q_z, z = model(data)
             test_loss += loss_function(recon_batch, data, q_z, z, epoch)[0].item()
             if i == 0:
-                sample_t = sample(recon_batch[:8])
+                if args.loss=='mixture':
+                    sample_t = sample(recon_batch[:8])
+                if args.loss=='CE':
+                    sample_t = sample_CE(recon_batch[:8])
+
                 n = min(data.size(0), 8)
                 comparison = torch.cat([data[:n],
                                       sample_t])
@@ -302,7 +334,7 @@ if __name__ == "__main__":
               'train loss' : train_loss,
               'test loss' : test_loss
               }
-    name = 'models/model_' + args.arch + '_' + args.loss_function + '_' + args.distribution + '_' + str(epoch) + '.pth'
+    name = 'models/model_' + args.arch + '_' + args.loss + '_' + args.distribution + '_' + str(epoch) + '.pth'
     torch.save(checkpoint, name)
     #if args.tsne:
 #evaluation_VAE.tsne_plot(model, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
